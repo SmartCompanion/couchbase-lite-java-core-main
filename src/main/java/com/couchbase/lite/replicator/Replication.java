@@ -729,7 +729,12 @@ public abstract class Replication implements NetworkReachabilityListener {
      */
     private void clearDbRef() {
         if (savingCheckpoint && lastSequence != null && db != null) {
-            db.setLastSequence(lastSequence, remoteCheckpointDocID(), !isPull());
+            if (!db.isOpen()) {
+                Log.w(Log.TAG_SYNC, "Not attempting to setLastSequence, db is closed");
+            } else {
+                db.setLastSequence(lastSequence, remoteCheckpointDocID(), !isPull());
+            }
+            Log.v(Log.TAG_SYNC, "%s: clearDbRef() setting db to null", this);
             db = null;
         }
     }
