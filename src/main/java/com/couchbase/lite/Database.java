@@ -811,7 +811,7 @@ public final class Database {
      * @exclude
      */
     @InterfaceAudience.Private
-    protected void clearDocumentCache() {
+    public void clearDocumentCache() {
         docCache.clear();
     }
 
