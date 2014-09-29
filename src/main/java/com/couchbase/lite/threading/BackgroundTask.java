@@ -34,7 +34,11 @@ public abstract class BackgroundTask implements Runnable {
         private final AtomicInteger mCount = new AtomicInteger(1);
 
         public Thread newThread(Runnable r) {
-            return new Thread(r, "BackgroundTask #" + mCount.getAndIncrement());
+//            return new Thread(r, "BackgroundTask #" + mCount.getAndIncrement());
+            return new Thread(r, "BackgroundTask #" +
+                    mCount.getAndIncrement() + " - " +
+                    System.currentTimeMillis());
+
         }
     };
 

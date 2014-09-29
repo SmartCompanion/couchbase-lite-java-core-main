@@ -1,5 +1,7 @@
 package com.couchbase.lite;
 
+import com.couchbase.lite.util.Log;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -17,6 +19,7 @@ public abstract class NetworkReachabilityManager {
      * Add Network Reachability Listener
      */
     public synchronized void addNetworkReachabilityListener(NetworkReachabilityListener listener) {
+        Log.d(Log.TAG_SYNC, "NetworkReachabilityListener added");
         if (networkReachabilityListeners == null) {
             networkReachabilityListeners = new ArrayList<NetworkReachabilityListener>();
         }
@@ -31,6 +34,7 @@ public abstract class NetworkReachabilityManager {
      * Remove Network Reachability Listener
      */
     public synchronized void removeNetworkReachabilityListener(NetworkReachabilityListener listener) {
+        Log.d(Log.TAG_SYNC, "NetworkReachabilityListener removed");
         if (networkReachabilityListeners == null) {
             networkReachabilityListeners = new ArrayList<NetworkReachabilityListener>();
         }

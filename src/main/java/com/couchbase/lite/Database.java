@@ -4676,7 +4676,9 @@ public final class Database {
             public void changed(Replication.ChangeEvent event) {
                 if (event.getSource().isRunning() == false) {
                     if (activeReplicators != null) {
-                        activeReplicators.remove(event.getSource());
+                        if(activeReplicators.remove(event.getSource())){
+                            Log.d(Log.TAG_SYNC, "Removed replication from database active replicators");
+                        }
                     }
                 }
             }
