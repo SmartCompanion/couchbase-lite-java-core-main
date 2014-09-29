@@ -3786,6 +3786,10 @@ public final class Database {
     @InterfaceAudience.Private
     public void forceInsert(RevisionInternal rev, List<String> revHistory, URL source) throws CouchbaseLiteException {
 
+        // TODO: in the iOS version, it is passed an immutable RevisionInternal and then
+        // TODO: creates a mutable copy. We should do the same here.
+        // TODO: see github.com/couchbase/couchbase-lite-java-core/issues/206#issuecomment-4436462
+
         RevisionInternal winningRev = null;
         boolean inConflict = false;
 
@@ -3817,17 +3821,18 @@ public final class Database {
                 throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
             }
 
-            // Validate new revision
-            RevisionInternal oldRev = null;
-            for(int i = 1;i < historyCount; i++) {
-                oldRev = localRevs.revWithDocIdAndRevId(docId, revHistory.get(i));
-                if (oldRev != null) {
-                    break;
+            // Validate against the latest common ancestor:
+            if(validations != null && validations.size() > 0) {
+                RevisionInternal oldRev = null;
+                for (int i = 1; i < historyCount; i++) {
+                    oldRev = localRevs.revWithDocIdAndRevId(docId, revHistory.get(i));
+                    if (oldRev != null) {
+                        break;
+                    }
                 }
+                String parentRevId = (historyCount > 1) ? revHistory.get(1) : null;
+                validateRevision(rev, oldRev, parentRevId);
             }
-            String parentRevId = (historyCount > 1) ? revHistory.get(1) : null;
-            RevisionInternal revCloned = rev.copyWithDocID(rev.getDocId(), null);
-            validateRevision(revCloned, oldRev, parentRevId);
 
             AtomicBoolean outIsDeleted = new AtomicBoolean(false);
             AtomicBoolean outIsConflict = new AtomicBoolean(false);
