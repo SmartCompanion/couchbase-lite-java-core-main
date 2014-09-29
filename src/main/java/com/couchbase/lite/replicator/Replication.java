@@ -28,6 +28,7 @@ import com.couchbase.lite.util.CollectionUtils;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.TextUtils;
 import com.couchbase.lite.util.URIUtils;
+import com.couchbase.lite.util.Utils;
 
 import org.apache.http.Header;
 import org.apache.http.HttpResponse;
@@ -49,6 +50,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
@@ -56,6 +58,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -109,6 +112,10 @@ public abstract class Replication implements NetworkReachabilityListener {
     protected static final int RETRY_DELAY = 60;
     protected static final int EXECUTOR_THREAD_POOL_SIZE = 5;
 
+    /**
+     * Mutex to monitor access to {@link #online}.
+     */
+    private static final Object ONLINE_MUTEX = new Object();
 
     /**
      * @exclude
@@ -139,6 +146,16 @@ public abstract class Replication implements NetworkReachabilityListener {
         REPLICATION_ACTIVE
     }
 
+    private static final ThreadFactory sThreadFactory = new ThreadFactory() {
+        private final AtomicInteger mCount = new AtomicInteger(1);
+        private final String threadId = UUID.randomUUID().toString();
+
+        public Thread newThread(Runnable r) {
+            return new Thread(r, "Pool id: " + threadId + " - remoteRequestExecutor #" +
+                    mCount.getAndIncrement() + " - " +
+                    System.currentTimeMillis());
+        }
+    };
 
     /**
      * Private Constructor
@@ -160,7 +177,11 @@ public abstract class Replication implements NetworkReachabilityListener {
         this.continuous = continuous;
         this.workExecutor = workExecutor;
         this.remote = remote;
-        this.remoteRequestExecutor = Executors.newFixedThreadPool(EXECUTOR_THREAD_POOL_SIZE);
+
+        this.remoteRequestExecutor = Executors.newFixedThreadPool(
+                EXECUTOR_THREAD_POOL_SIZE,
+                sThreadFactory);
+//        this.remoteRequestExecutor = Executors.newFixedThreadPool(EXECUTOR_THREAD_POOL_SIZE);
         this.changeListeners = new CopyOnWriteArrayList<ChangeListener>();
         this.online = true;
         this.requestHeaders = new HashMap<String, Object>();
@@ -512,6 +533,11 @@ public abstract class Replication implements NetworkReachabilityListener {
 
     }
 
+    @Override
+    public boolean equals(Object obj) {
+        return super.equals(obj);
+    }
+
     /**
      * Stops replication, asynchronously.
      */
@@ -834,6 +860,9 @@ public abstract class Replication implements NetworkReachabilityListener {
         notifyChangeListeners();
 
         saveLastSequence();
+
+        //FIXME verify if this doesn't affect cbl logic
+        //workExecutor.shutdown();
 
         batcher = null;
 
@@ -1194,6 +1223,7 @@ public abstract class Replication implements NetworkReachabilityListener {
     public void fetchRemoteCheckpointDoc() {
         lastSequenceChanged = false;
         String checkpointId = remoteCheckpointDocID();
+
         final String localLastSequence = db.lastSequenceWithCheckpointId(checkpointId);
 
         Log.v(Log.TAG_SYNC, "%s | %s: fetchRemoteCheckpointDoc() calling asyncTaskStarted()", this, Thread.currentThread());
@@ -1328,8 +1358,14 @@ public abstract class Replication implements NetworkReachabilityListener {
         db.runAsync(new AsyncTask() {
             @Override
             public void run(Database database) {
-                Log.d(Log.TAG_SYNC, "%s: Going offline", this);
-                online = false;
+                synchronized (ONLINE_MUTEX) {
+                    if (!online) {
+                        Log.v(Log.TAG_SYNC, "%s: goOffline() callback called, but online == false. ignoring", Replication.this);
+                        return;
+                    }
+                    Log.d(Log.TAG_SYNC, "%s: Going offline", this);
+                    online = false;
+                }
                 stopRemoteRequests();
                 updateProgress();
                 notifyChangeListeners();
@@ -1349,8 +1385,15 @@ public abstract class Replication implements NetworkReachabilityListener {
         db.runAsync(new AsyncTask() {
             @Override
             public void run(Database database) {
-                Log.d(Log.TAG_SYNC, "%s: Going online", this);
-                online = true;
+                synchronized (ONLINE_MUTEX) {
+                    if (online) {
+                        Log.v(Log.TAG_SYNC, "%s: goOnline() callback called, but online == true. ignoring", Replication.this);
+                        return;
+                    }
+
+                    Log.d(Log.TAG_SYNC, "%s: Going online", this);
+                    online = true;
+                }
 
                 if (running) {
                     lastSequence = null;
@@ -1377,7 +1420,10 @@ public abstract class Replication implements NetworkReachabilityListener {
                 Log.d(Log.TAG_SYNC, "%s: remoteRequestExecutor.awaitTermination succeeded: %s", this, succeeded);
                 */
 
-                remoteRequestExecutor = Executors.newCachedThreadPool();
+                remoteRequestExecutor = Executors.newFixedThreadPool(
+                        EXECUTOR_THREAD_POOL_SIZE,
+                        sThreadFactory);
+//                remoteRequestExecutor = Executors.newFixedThreadPool(EXECUTOR_THREAD_POOL_SIZE);
                 checkSession();
                 notifyChangeListeners();
             }
@@ -1585,6 +1631,10 @@ public abstract class Replication implements NetworkReachabilityListener {
                 return new Status(Status.FORBIDDEN);
             } else if (errorStr.equalsIgnoreCase("conflict")) {
                 return new Status(Status.CONFLICT);
+            } else if (errorStr.equalsIgnoreCase("missing")) {
+                return new Status(Status.NOT_FOUND);
+            } else if (errorStr.equalsIgnoreCase("not_found")) {
+                return new Status(Status.NOT_FOUND);
             } else {
                 return new Status(Status.UPSTREAM_ERROR);
             }
