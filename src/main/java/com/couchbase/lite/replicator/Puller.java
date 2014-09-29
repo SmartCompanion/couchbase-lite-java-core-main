@@ -101,12 +101,6 @@ public final class Puller extends Replication implements ChangeTrackerClient {
         }
 
         if (changeTracker != null) {
-//            db.runAsync(new AsyncTask() {
-//                @Override
-//                public void run(Database database) {
-//
-//                }
-//            });
 
             Log.d(Log.TAG_SYNC, "%s: stopping changetracker", this, changeTracker);
             changeTracker.setClient(null);  // stop it from calling my changeTrackerStopped()
@@ -136,9 +130,8 @@ public final class Puller extends Replication implements ChangeTrackerClient {
             if (downloadsToInsert != null) {
                 downloadsToInsert.flush();
             }
-        }
-
     }
+
 
 
     @Override
