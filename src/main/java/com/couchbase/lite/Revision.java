@@ -166,7 +166,13 @@ public abstract class Revision {
         if (attachmentsMetadata == null) {
             return null;
         }
+        
         Map<String, Object> attachmentMetadata = (Map<String, Object>) attachmentsMetadata.get(name);
+
+        if (attachmentMetadata == null) {
+            return null;
+        }
+
         return new Attachment(this, name, attachmentMetadata);
     }
 
