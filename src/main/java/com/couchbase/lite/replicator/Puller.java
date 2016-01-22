@@ -177,6 +177,11 @@ public final class Puller extends Replication implements ChangeTrackerClient {
             }
         }
 
+        if (changeTracker != null) {
+            Log.e(Log.TAG_SYNC, "%s: changeTracker[%s] already existed.", this, changeTracker);
+            changeTracker.stop();
+        }
+
         caughtUp = new AtomicBoolean(false);
 
 
@@ -642,6 +647,10 @@ public final class Puller extends Replication implements ChangeTrackerClient {
 
         dl.setAuthenticator(getAuthenticator());
 
+        if (remoteRequestExecutor.isShutdown()) {
+            String msg = "pullBulkRevisions called, but remoteRequestExecutor has been terminated";
+            throw new IllegalStateException(msg);
+        }
         remoteRequestExecutor.execute(dl);
 
     }

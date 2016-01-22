@@ -870,7 +870,10 @@ public abstract class Replication implements NetworkReachabilityListener {
         saveLastSequence();
 
         //FIXME verify if this doesn't affect cbl logic
-        //workExecutor.shutdown();
+        if (!remoteRequestExecutor.isShutdown()) {
+            Log.d(Log.TAG_SYNC, "%s: Shutting down ThreadPoolExecutor: %s", this, remoteRequestExecutor);
+            remoteRequestExecutor.shutdown();
+        }
 
         batcher = null;
 
@@ -1088,7 +1091,7 @@ public abstract class Replication implements NetworkReachabilityListener {
         });
 
 
-        if (remoteRequestExecutor.isTerminated()) {
+        if (remoteRequestExecutor.isShutdown()) {
             String msg = "sendAsyncRequest called, but remoteRequestExecutor has been terminated";
             throw new IllegalStateException(msg);
         }
@@ -1119,6 +1122,10 @@ public abstract class Replication implements NetworkReachabilityListener {
 
             request.setAuthenticator(getAuthenticator());
 
+            if (remoteRequestExecutor.isShutdown()) {
+                String msg = "sendAsyncMultipartDownloaderRequest called, but remoteRequestExecutor has been terminated";
+                throw new IllegalStateException(msg);
+            }
             remoteRequestExecutor.execute(request);
         } catch (MalformedURLException e) {
             Log.e(Log.TAG_SYNC, "Malformed URL for async request", e);
@@ -1149,6 +1156,10 @@ public abstract class Replication implements NetworkReachabilityListener {
 
         request.setAuthenticator(getAuthenticator());
 
+        if (remoteRequestExecutor.isShutdown()) {
+            String msg = "sendAsyncMultipartRequest called, but remoteRequestExecutor has been terminated";
+            throw new IllegalStateException(msg);
+        }
         remoteRequestExecutor.execute(request);
     }
 

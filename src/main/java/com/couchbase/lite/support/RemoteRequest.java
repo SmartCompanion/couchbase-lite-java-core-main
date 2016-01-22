@@ -2,25 +2,21 @@ package com.couchbase.lite.support;
 
 import com.couchbase.lite.Database;
 import com.couchbase.lite.Manager;
-import com.couchbase.lite.auth.AuthenticatorImpl;
 import com.couchbase.lite.auth.Authenticator;
+import com.couchbase.lite.auth.AuthenticatorImpl;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.URIUtils;
 import com.couchbase.lite.util.Utils;
 
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpException;
-import org.apache.http.HttpHost;
 import org.apache.http.HttpRequest;
 import org.apache.http.HttpRequestInterceptor;
 import org.apache.http.HttpResponse;
 import org.apache.http.StatusLine;
-import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.AuthState;
 import org.apache.http.auth.Credentials;
 import org.apache.http.auth.UsernamePasswordCredentials;
-import org.apache.http.client.ClientProtocolException;
-import org.apache.http.client.CredentialsProvider;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.HttpResponseException;
 import org.apache.http.client.methods.HttpEntityEnclosingRequestBase;
@@ -32,20 +28,14 @@ import org.apache.http.client.protocol.ClientContext;
 import org.apache.http.conn.ClientConnectionManager;
 import org.apache.http.entity.ByteArrayEntity;
 import org.apache.http.impl.auth.BasicScheme;
-import org.apache.http.impl.client.ClientParamsStack;
 import org.apache.http.impl.client.DefaultHttpClient;
-import org.apache.http.params.HttpParams;
-import org.apache.http.protocol.ExecutionContext;
 import org.apache.http.protocol.HttpContext;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InterruptedIOException;
 import java.net.URL;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -209,7 +199,7 @@ public class RemoteRequest implements Runnable {
             // add in cookies to global store
             try {
                 if (httpClient instanceof DefaultHttpClient) {
-                    DefaultHttpClient defaultHttpClient = (DefaultHttpClient)httpClient;
+                    DefaultHttpClient defaultHttpClient = (DefaultHttpClient) httpClient;
                     this.clientFactory.addCookies(defaultHttpClient.getCookieStore().getCookies());
                 }
             } catch (Exception e) {
@@ -241,24 +231,37 @@ public class RemoteRequest implements Runnable {
                     }
                 }
             }
-        } catch (IOException e) {
-            Log.e(Log.TAG_REMOTE_REQUEST, "io exception", e);
+        } catch (InterruptedIOException e) {
+            // Interrupted exception caused when remote request was force stopped.
+            Log.e(Log.TAG_REMOTE_REQUEST, "%s: InterruptedIOException: %s.", this, e);
+            e.printStackTrace();
             error = e;
-            // Treat all IOExceptions as transient, per:
-            // http://hc.apache.org/httpclient-3.x/exception-handling.html
-            Log.v(Log.TAG_SYNC, "%s: RemoteRequest calling retryRequest()", this);
-            if (retryRequest()) {
-                return;
+
+        } catch (IOException e) {
+            Log.e(Log.TAG_REMOTE_REQUEST, "%s: io exception", this, e);
+            e.printStackTrace();
+            error = e;
+
+            if (request.isAborted()) {
+                Log.e(Log.TAG_REMOTE_REQUEST, "Request aborted");
+
             } else {
-                Log.e(Log.TAG_SYNC, "%s: RemoteRequest failed all retries, giving up.", this);
+
+                // Treat all IOExceptions as transient, per:
+                // http://hc.apache.org/httpclient-3.x/exception-handling.html
+                Log.v(Log.TAG_REMOTE_REQUEST, "%s: RemoteRequest calling retryRequest()", this);
+                if (retryRequest()) {
+                    return;
+                } else {
+                    Log.e(Log.TAG_REMOTE_REQUEST, "%s: RemoteRequest failed all retries, giving up.", this);
+                }
             }
         } catch (Exception e) {
-            Log.e(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() Exception: ", e, this);
+            Log.e(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() Exception: %s.  url: %s", this, e, url);
             error = e;
         }
         Log.v(Log.TAG_SYNC, "%s: RemoteRequest calling respondWithResult.  error: %s", this, error);
         respondWithResult(fullBody, error, response);
-
     }
 
     protected void preemptivelySetAuthCredentials(HttpClient httpClient) {

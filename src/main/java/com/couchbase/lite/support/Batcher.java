@@ -97,6 +97,10 @@ public class Batcher<T> {
      * After this method returns, the queue is guaranteed to be empty.
      */
     public void flushAll() {
+        if (inbox == null) {
+            return;
+        }
+
         while (inbox.size() > 0) {
             unschedule();
             List<T> toProcess = new ArrayList<T>();
@@ -112,7 +116,9 @@ public class Batcher<T> {
     public void clear() {
         Log.v(Log.TAG_SYNC, "%s: clear() called, setting inbox to null", this);
         unschedule();
-        inbox = null;
+        if (inbox != null) {
+            inbox.clear();
+        }
     }
 
     public int count() {
@@ -138,7 +144,7 @@ public class Batcher<T> {
             } else if (inbox.size() <= capacity) {
                 Log.v(Log.TAG_SYNC, "%s: inbox.size() <= capacity, adding %d items from inbox -> toProcess", this, inbox.size());
                 toProcess.addAll(inbox);
-                inbox = null;
+                inbox.clear();
             } else {
                 Log.v(Log.TAG_SYNC, "%s: processNow() called, inbox size: %d", this, inbox.size());
                 int i = 0;
