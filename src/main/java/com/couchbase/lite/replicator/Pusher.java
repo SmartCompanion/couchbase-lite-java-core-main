@@ -192,7 +192,7 @@ public final class Pusher extends Replication implements Database.ChangeListener
             maxPendingSequence = Long.parseLong(lastSequence);
         } catch (NumberFormatException e) {
             Log.w(Log.TAG_SYNC, "Error converting lastSequence: %s to long.  Using 0", lastSequence);
-            maxPendingSequence = new Long(0);
+            maxPendingSequence = Long.valueOf(0);
         }
 
         if(filterName != null) {

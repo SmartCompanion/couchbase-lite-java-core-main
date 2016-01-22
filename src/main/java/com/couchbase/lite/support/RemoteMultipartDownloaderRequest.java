@@ -8,7 +8,6 @@ import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.StatusLine;
-import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.HttpResponseException;
 import org.apache.http.client.methods.HttpUriRequest;
@@ -111,7 +110,9 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
 
                     } finally {
                         try {
-                            inputStream.close();
+                            if (inputStream != null) {
+                                inputStream.close();
+                            }
                         } catch (IOException e) {
                         }
                     }
@@ -127,7 +128,9 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
                             respondWithResult(fullBody, error, response);
                         } finally {
                             try {
-                                inputStream.close();
+                                if (inputStream != null) {
+                                    inputStream.close();
+                                }
                             } catch (IOException e) {
                             }
                         }

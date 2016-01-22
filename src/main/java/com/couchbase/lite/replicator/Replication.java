@@ -10,7 +10,6 @@ import com.couchbase.lite.RevisionList;
 import com.couchbase.lite.Status;
 import com.couchbase.lite.auth.Authenticator;
 import com.couchbase.lite.auth.AuthenticatorImpl;
-import com.couchbase.lite.auth.Authorizer;
 import com.couchbase.lite.auth.FacebookAuthorizer;
 import com.couchbase.lite.auth.PersonaAuthorizer;
 import com.couchbase.lite.internal.InterfaceAudience;
@@ -28,11 +27,9 @@ import com.couchbase.lite.util.CollectionUtils;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.TextUtils;
 import com.couchbase.lite.util.URIUtils;
-import com.couchbase.lite.util.Utils;
 
 import org.apache.http.Header;
 import org.apache.http.HttpResponse;
-import org.apache.http.client.CookieStore;
 import org.apache.http.client.HttpResponseException;
 import org.apache.http.cookie.Cookie;
 import org.apache.http.entity.mime.MultipartEntity;
@@ -211,7 +208,7 @@ public abstract class Replication implements NetworkReachabilityListener {
                 } catch (MalformedURLException e) {
                     throw new IllegalArgumentException(e);
                 }
-                authorizer.registerAccessToken(facebookAccessToken, email, remoteWithQueryRemoved.toExternalForm());
+                FacebookAuthorizer.registerAccessToken(facebookAccessToken, email, remoteWithQueryRemoved.toExternalForm());
                 setAuthenticator(authorizer);
             }
 
@@ -1224,7 +1221,7 @@ public abstract class Replication implements NetworkReachabilityListener {
 
             byte[] inputBytes = null;
             try {
-                inputBytes = db.getManager().getObjectMapper().writeValueAsBytes(spec);
+                inputBytes = Manager.getObjectMapper().writeValueAsBytes(spec);
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }

@@ -811,7 +811,7 @@ public final class Puller extends Replication implements ChangeTrackerClient {
         try {
             for (RevisionInternal rev : downloads) {
                 long fakeSequence = rev.getSequence();
-                List<String> history = db.parseCouchDBRevisionHistory(rev.getProperties());
+                List<String> history = Database.parseCouchDBRevisionHistory(rev.getProperties());
                 if (history.isEmpty() && rev.getGeneration() > 1) {
                     Log.w(Log.TAG_SYNC, "%s: Missing revision history in response for: %s", this, rev);
                     setError(new CouchbaseLiteException(Status.UPSTREAM_ERROR));

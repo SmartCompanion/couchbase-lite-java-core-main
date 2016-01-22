@@ -1,9 +1,7 @@
 package com.couchbase.lite.support;
 
-import com.couchbase.lite.Database;
 import com.couchbase.lite.util.Log;
 
-import java.io.InterruptedIOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashSet;

@@ -1549,7 +1549,7 @@ public class Router implements Database.ChangeListener {
             throw new CouchbaseLiteException(Status.BAD_REQUEST);
         }
 
-        if(getQuery("new_edits") == null || (getQuery("new_edits") != null && (new Boolean(getQuery("new_edits"))))) {
+        if(getQuery("new_edits") == null || (getQuery("new_edits") != null && (Boolean.valueOf(getQuery("new_edits"))))) {
             // Regular PUT
             status = update(_db, docID, bodyDict, false);
         } else {
@@ -1630,7 +1630,7 @@ public class Router implements Database.ChangeListener {
         if(reduceSource != null) {
             reduceBlock = View.getCompiler().compileReduce(reduceSource, language);
             if(reduceBlock == null) {
-                Log.w(Log.TAG_ROUTER, "View %s has unknown reduce function: %s", viewName, reduceBlock);
+                Log.w(Log.TAG_ROUTER, "View %s has unknown reduce function: null", viewName);
                 return null;
             }
         }

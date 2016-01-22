@@ -1,7 +1,6 @@
 package com.couchbase.lite.router;
 
 
-import com.couchbase.lite.Database;
 import com.couchbase.lite.internal.Body;
 import com.couchbase.lite.util.Log;
 
@@ -202,7 +201,7 @@ public class URLConnection extends HttpURLConnection {
         }
 
         // If the request method is neither PUT or POST, then you're not writing
-        if (method != PUT && method != POST) {
+        if (!method.equals(PUT) && !method.equals(POST)) {
             throw new ProtocolException("Can only write to PUT or POST");
         }
 

@@ -225,7 +225,9 @@ public class RemoteRequest implements Runnable {
                                 Object.class);
                     } finally {
                         try {
-                            stream.close();
+                            if (stream != null) {
+                                stream.close();
+                            }
                         } catch (IOException e) {
                         }
                     }

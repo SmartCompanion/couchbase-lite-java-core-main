@@ -66,11 +66,10 @@ public class BlobStore {
             Log.e(Log.TAG_BLOB_STORE, "Error, SHA-1 digest is unavailable.");
             return null;
         }
-        byte[] sha1hash = new byte[40];
+        byte[] sha1hash;
         md.update(data, 0, data.length);
         sha1hash = md.digest();
-        BlobKey result = new BlobKey(sha1hash);
-        return result;
+        return new BlobKey(sha1hash);
     }
 
     public static BlobKey keyForBlobFromFile(File file) {
@@ -81,7 +80,7 @@ public class BlobStore {
             Log.e(Log.TAG_BLOB_STORE, "Error, SHA-1 digest is unavailable.");
             return null;
         }
-        byte[] sha1hash = new byte[40];
+        byte[] sha1hash;
 
         try {
             FileInputStream fis = new FileInputStream(file);
@@ -97,8 +96,7 @@ public class BlobStore {
         }
 
         sha1hash = md.digest();
-        BlobKey result = new BlobKey(sha1hash);
-        return result;
+        return new BlobKey(sha1hash);
     }
 
     public String pathForKey(BlobKey key) {

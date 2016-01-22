@@ -522,6 +522,7 @@ public class Base64 {
                 case 0: break;
                 case 1: output_len += 2; break;
                 case 2: output_len += 3; break;
+                default: break;
             }
         }
 

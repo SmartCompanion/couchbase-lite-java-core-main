@@ -4,7 +4,6 @@ import com.couchbase.lite.Database;
 import com.couchbase.lite.Manager;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.internal.RevisionInternal;
-import com.couchbase.lite.support.CouchbaseLiteHttpClientFactory;
 import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.support.MultipartDocumentReader;
 import com.couchbase.lite.support.MultipartReader;
@@ -18,7 +17,6 @@ import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.StatusLine;
-import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.HttpResponseException;
 import org.apache.http.client.methods.HttpUriRequest;
@@ -158,7 +156,9 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
 
                     } finally {
                         try {
-                            inputStream.close();
+                            if (inputStream != null) {
+                                inputStream.close();
+                            }
                         } catch (IOException e) {
                         }
                     }
@@ -173,7 +173,9 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
                             respondWithResult(fullBody, error, response);
                         } finally {
                             try {
-                                inputStream.close();
+                                if (inputStream != null) {
+                                    inputStream.close();
+                                }
                             } catch (IOException e) {
                             }
                         }

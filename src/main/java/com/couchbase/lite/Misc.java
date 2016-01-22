@@ -23,7 +23,7 @@ public class Misc {
             Log.e(Database.TAG, "Error, SHA-1 digest is unavailable.");
             return null;
         }
-        byte[] sha1hash = new byte[40];
+        byte[] sha1hash;
         md.update(input, 0, input.length);
         sha1hash = md.digest();
         return convertToHex(sha1hash);

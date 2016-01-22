@@ -4300,7 +4300,9 @@ public final class Database {
                 result.setSequence(seq);
             }
         } finally {
-            cursor.close();
+            if (cursor != null) {
+                cursor.close();
+            }
         }
         return result;
     }
