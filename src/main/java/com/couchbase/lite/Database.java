@@ -4655,6 +4655,7 @@ public final class Database {
      */
     @InterfaceAudience.Private
     public void forgetReplication(Replication replication) {
+        Log.w(Log.TAG_SYNC, "Removing the replication " + replication.toString());
         allReplicators.remove(replication);
     }
 
@@ -4673,7 +4674,7 @@ public final class Database {
                 if (event.getSource().isRunning() == false) {
                     if (activeReplicators != null) {
                         if(activeReplicators.remove(event.getSource())){
-                            Log.d(Log.TAG_SYNC, "Removed replication from database active replicators");
+                            Log.d(Log.TAG_SYNC, "Removed replication from database active replicators " + event.getSource().toString());
                         }
                     }
                 }

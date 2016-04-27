@@ -223,8 +223,15 @@ public final class Puller extends Replication implements ChangeTrackerClient {
     @InterfaceAudience.Private
     protected void stopped() {
         //TODO verify it this doesn't affects cbl logic
-        downloadsToInsert.flushAll();
-        downloadsToInsert = null;
+
+        if (downloadsToInsert != null) {
+            Log.w(Log.TAG_SYNC, "Puller.stopped(): downloadsToInsert is null!");
+            downloadsToInsert.flushAll();
+            downloadsToInsert = null;
+        } else {
+            Log.w(Log.TAG_SYNC, "Puller.stopped(): downloadsToInsert is not null!");
+        }
+
         super.stopped();
     }
 
