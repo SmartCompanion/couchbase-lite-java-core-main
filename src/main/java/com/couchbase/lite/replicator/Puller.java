@@ -224,6 +224,8 @@ public final class Puller extends Replication implements ChangeTrackerClient {
     protected void stopped() {
         //TODO verify it this doesn't affects cbl logic
 
+        // Make sure that this is not null, otherwise a NPE here will prevent puller from
+        // properly stopping, resulting in a leak
         if (downloadsToInsert != null) {
             Log.w(Log.TAG_SYNC, "Puller.stopped(): downloadsToInsert is null!");
             downloadsToInsert.flushAll();
