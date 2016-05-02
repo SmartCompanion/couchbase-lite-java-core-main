@@ -875,7 +875,6 @@ public abstract class Replication implements NetworkReachabilityListener {
         batcher = null;
 
         if (db != null) {
-            Log.d(Log.TAG_SYNC, "Replication.stopped(): removing replication from NetworkReachabilityListeners " + this.toString());
             db.getManager().getContext().getNetworkReachabilityManager().removeNetworkReachabilityListener(this);
         }
 

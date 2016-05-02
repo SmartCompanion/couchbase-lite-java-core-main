@@ -227,13 +227,9 @@ public final class Puller extends Replication implements ChangeTrackerClient {
         // Make sure that this is not null, otherwise a NPE here will prevent puller from
         // properly stopping, resulting in a leak
         if (downloadsToInsert != null) {
-            Log.w(Log.TAG_SYNC, "Puller.stopped(): downloadsToInsert is null!");
             downloadsToInsert.flushAll();
             downloadsToInsert = null;
-        } else {
-            Log.w(Log.TAG_SYNC, "Puller.stopped(): downloadsToInsert is not null!");
         }
-
         super.stopped();
     }
 
