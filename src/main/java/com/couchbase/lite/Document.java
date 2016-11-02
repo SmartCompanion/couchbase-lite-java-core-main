@@ -15,6 +15,7 @@ package com.couchbase.lite;
 
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.internal.RevisionInternal;
+import com.couchbase.lite.util.DeepClone;
 import com.couchbase.lite.util.Log;
 
 import java.net.URL;
@@ -150,7 +151,7 @@ public class Document {
      * A date/time after which this document will be automatically purged.
      */
     public Date getExpirationDate() {
-        long timestamp = database.getStore().expirationOfDocument(documentId);
+        long timestamp = database.expirationOfDocument(documentId);
         if (timestamp == 0)
             return null;
         return new Date(timestamp);
@@ -465,7 +466,7 @@ public class Document {
     protected List<SavedRevision> getLeafRevisions(boolean includeDeleted)
             throws CouchbaseLiteException {
         List<SavedRevision> result = new ArrayList<SavedRevision>();
-        RevisionList revs = database.getStore().getAllRevisions(documentId, true);
+        RevisionList revs = database.getAllRevisions(documentId, true);
         if (revs != null) {
             for (RevisionInternal rev : revs) {
                 // add it to result, unless we are not supposed to include deleted and it's deleted
@@ -477,6 +478,7 @@ public class Document {
             }
         }
         return Collections.unmodifiableList(result);
+
     }
 
     protected Map<String, Object> propertiesToInsert(Map<String, Object> properties)
@@ -488,7 +490,7 @@ public class Document {
         if (idProp != null && !idProp.equalsIgnoreCase(getId()))
             Log.w(TAG, "Trying to put wrong _id to this: %s properties: %s", this, properties);
 
-        Map<String, Object> nuProperties = new HashMap<String, Object>(properties);
+        Map<String, Object> nuProperties = DeepClone.deepClone(properties);
 
         // Process _attachments dict, converting CBLAttachments to dicts:
         Map<String, Object> attachments = null;

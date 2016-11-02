@@ -151,7 +151,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                         HttpClientFactory clientFactory,
                         Replication.Lifecycle lifecycle,
                         Replication parentReplication) {
-
+        if (remote == null) throw new IllegalArgumentException("remote is null");
         Utils.assertNotNull(lifecycle, "Must pass in a non-null lifecycle");
 
         this.parentReplication = parentReplication;
@@ -1478,6 +1478,11 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                 clearDbRef();
 
                 notifyChangeListenersStateTransition(transition);
+
+                // ask executor to shutdown. this does not force to shutdown.
+                // https://docs.oracle.com/javase/7/docs/api/java/util/concurrent/ExecutorService.html#shutdown()
+                if (executor != null && !executor.isShutdown())
+                    executor.shutdown();
             }
         });
     }

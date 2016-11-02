@@ -99,8 +99,10 @@ public final class DatabaseUpgrade {
             }
 
             // Move attachment storage directory:
-            if (!moveAttachmentsDir())
+            if (!moveAttachmentsDir()) {
+                Log.e(TAG, "Upgrade failed: Couldn't move attachment store. db: %s", db.toString());
                 return false;
+            }
 
             // Upgrade documents:
             // CREATE TABLE docs (doc_id INTEGER PRIMARY KEY, docid TEXT UNIQUE NOT NULL);
@@ -116,15 +118,19 @@ public final class DatabaseUpgrade {
                             long docNumericID = cursor.getLong(0);
                             String docID = cursor.getString(1);
                             Status status = importDoc(docID, docNumericID);
-                            if (status.isError())
+                            if (status.isError()) {
+                                Log.e(TAG, "Failed to importDoc() docID=%s, docNumericID=%d, status=%s", docID, docNumericID, status);
                                 return false;
+                            }
                             cursor.moveToNext();
                         }
                         return true;
                     }
                 });
-                if (!ret)
+                if (!ret) {
+                    Log.e(TAG, "Failed to upgarade documents.");
                     return false;
+                }
             } finally {
                 if (cursor != null)
                     cursor.close();
@@ -167,11 +173,25 @@ public final class DatabaseUpgrade {
     }
 
     private boolean moveAttachmentsDir() {
+        // v1.1.x or v1.2.x
         File oldAttachmentsPath = new File(FileDirUtils.getPathWithoutExt(path) + " attachments");
-        if (!oldAttachmentsPath.canRead())
-            return true;
+        if (!oldAttachmentsPath.exists()) {
+            // v1.0.x
+            oldAttachmentsPath = new File(FileDirUtils.getPathWithoutExt(path), "attachments");
+            if (!oldAttachmentsPath.exists()) {
+                // In case of not existing the old version attachment directory,
+                // return true, and go through
+                return true;
+            } else if (!oldAttachmentsPath.canRead()) {
+                Log.e(TAG, "Attachment directory (%s) is not readable.", oldAttachmentsPath);
+                return false;
+            }
+        } else if (!oldAttachmentsPath.canRead()) {
+            Log.e(TAG, "Attachment directory (%s) is not readable.", oldAttachmentsPath);
+            return false;
+        }
         File newAttachmentsPath = new File(db.getAttachmentStorePath());
-        Log.v(TAG, "Upgrade: Moving '%s' to '%s'",
+        Log.i(TAG, "Upgrade: Moving '%s' to '%s'",
                 oldAttachmentsPath, newAttachmentsPath);
         FileDirUtils.deleteRecursive(newAttachmentsPath);
 
@@ -421,18 +441,24 @@ public final class DatabaseUpgrade {
     }
 
     private void importInfo() {
-        // CREATE TABLE info (key TEXT PRIMARY KEY, value TEXT);
-        String sql = "SELECT key, value FROM info";
-        Cursor cursor = storageEngine.rawQuery(sql, null);
-        try {
-            cursor.moveToNext();
-            while (!cursor.isAfterLast()) {
-                db.getStore().setInfo(cursor.getString(0), cursor.getString(1));
-                cursor.moveToNext();
+        db.runInTransaction(new TransactionalTask() {
+            @Override
+            public boolean run() {
+                // CREATE TABLE info (key TEXT PRIMARY KEY, value TEXT);
+                String sql = "SELECT key, value FROM info";
+                Cursor cursor = storageEngine.rawQuery(sql, null);
+                try {
+                    cursor.moveToNext();
+                    while (!cursor.isAfterLast()) {
+                        db.setInfo(cursor.getString(0), cursor.getString(1));
+                        cursor.moveToNext();
+                    }
+                } finally {
+                    if (cursor != null)
+                        cursor.close();
+                }
+                return true;
             }
-        } finally {
-            if (cursor != null)
-                cursor.close();
-        }
+        });
     }
 }

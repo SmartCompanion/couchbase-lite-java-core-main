@@ -110,8 +110,7 @@ public final class Manager {
      */
     @InterfaceAudience.Public
     public Manager(Context context, ManagerOptions options) throws IOException {
-
-        Log.d(Database.TAG, "Starting Manager version: %s", Manager.VERSION);
+        Log.i(Database.TAG, "### %s ###", getFullVersionInfo());
 
         this.context = context;
         this.directoryFile = context.getFilesDir();
@@ -783,18 +782,29 @@ public final class Manager {
      * @exclude
      */
     @InterfaceAudience.Private
-    private void upgradeOldDatabaseFiles(File directory) {
-        File[] files = directory.listFiles(new FilenameFilter() {
+    private void upgradeOldDatabaseFiles(File dir) throws IOException {
+        if (dir == null) throw new IllegalArgumentException("dir argument is null.");
+        if (!dir.exists() || !dir.isDirectory() || !dir.canRead() || !dir.canWrite())
+            throw new IllegalArgumentException(String.format(Locale.ENGLISH,
+                    "dir[%s] might not exist, not be a directory, or not have read/write permission.", dir));
+
+        File[] files = dir.listFiles(new FilenameFilter() {
             @Override
             public boolean accept(File file, String name) {
                 return name.endsWith(kV1DBExtension);
             }
         });
 
+        // https://docs.oracle.com/javase/7/docs/api/java/io/File.html#listFiles(java.io.FilenameFilter)
+        // returns: Returns null if this abstract pathname does not denote a directory, or if an I/O error occurs.
+        if (files == null)
+            throw new IOException(String.format(Locale.ENGLISH,
+                    "Error in File.listFiles(): dir[%s]: dir might not be directory, or i/o error occurs.", dir));
+
         for (File file : files) {
             String filename = file.getName();
             String name = nameOfDatabaseAtPath(filename);
-            String oldDbPath = new File(directory, filename).getAbsolutePath();
+            String oldDbPath = new File(dir, filename).getAbsolutePath();
             if (!upgradeDatabase(name, oldDbPath, true))
                 throw new RuntimeException("Database upgrade failed for: " + name);
         }
@@ -1038,5 +1048,11 @@ public final class Manager {
                     Version.getCommitHash());
         }
         return USER_AGENT;
+    }
+
+    public static String getFullVersionInfo() {
+        return String.format(Locale.ENGLISH, "Couchbase Lite %s (%s)",
+                Version.getVersionName(),
+                Version.getCommitHash());
     }
 }

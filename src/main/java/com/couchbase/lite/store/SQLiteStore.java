@@ -234,9 +234,7 @@ public class SQLiteStore implements Store, EncryptableStore {
         boolean isSuccessful = false;
         if (!beginTransaction()) {
             close();
-            String message = "Cannot begin transaction";
-            Log.e(TAG, message);
-            throw new CouchbaseLiteException(message, Status.DB_ERROR);
+            throw new CouchbaseLiteException("Error in beginTransaction()", Status.DB_ERROR);
         }
 
         try {
@@ -312,7 +310,11 @@ public class SQLiteStore implements Store, EncryptableStore {
             isSuccessful = true;
         } finally {
             // END TRANSACTION WITH COMMIT OR ROLLBACK
-            endTransaction(isSuccessful);
+            if (!endTransaction(isSuccessful)) {
+                close();
+                throw new CouchbaseLiteException("Error in endTransaction()", Status.DB_ERROR);
+            }
+
             // if failed, close storageEngine before return:
             if (!isSuccessful) {
                 close();
@@ -659,7 +661,10 @@ public class SQLiteStore implements Store, EncryptableStore {
         Log.v(TAG, "Begin database compaction...");
         synchronized (compactLock) {
             boolean shouldCommit = false;
-            beginTransaction();
+
+            if (!beginTransaction())
+                throw new CouchbaseLiteException("Error in beginTransaction()", Status.DB_ERROR);
+
             try {
                 if (getInfo("pruned") == null) {
                     // Bulk pruning is no longer needed, because revisions are pruned incrementally as new
@@ -685,7 +690,8 @@ public class SQLiteStore implements Store, EncryptableStore {
                 }
                 shouldCommit = true;
             } finally {
-                endTransaction(shouldCommit);
+                if (!endTransaction(shouldCommit))
+                    throw new CouchbaseLiteException("Error in endTransaction()", Status.DB_ERROR);
             }
 
             // https://www.sqlite.org/pragma.html#pragma_wal_checkpoint
@@ -708,11 +714,17 @@ public class SQLiteStore implements Store, EncryptableStore {
         Log.v(TAG, "...Finished database compaction.");
     }
 
+    /**
+     * @note Throw RuntimeException if TransactionalTask throw Exception.
+     *       Otherwise return true or false
+     */
     @Override
     public boolean runInTransaction(TransactionalTask transactionalTask) {
         boolean shouldCommit = true;
 
-        beginTransaction();
+        if (!beginTransaction())
+            return false;
+
         try {
             shouldCommit = transactionalTask.run();
         } catch (Exception e) {
@@ -720,7 +732,8 @@ public class SQLiteStore implements Store, EncryptableStore {
             Log.e(TAG, e.toString(), e);
             throw new RuntimeException(e);
         } finally {
-            endTransaction(shouldCommit);
+            if (!endTransaction(shouldCommit))
+                return false;
         }
 
         return shouldCommit;
@@ -749,7 +762,6 @@ public class SQLiteStore implements Store, EncryptableStore {
 
         Cursor cursor = null;
         try {
-            cursor = null;
             String cols = "revid, deleted, sequence";
             if (withBody) {
                 cols += ", json";
@@ -870,7 +882,8 @@ public class SQLiteStore implements Store, EncryptableStore {
                 result.setSequence(seq);
             }
         } finally {
-            cursor.close();
+            if (cursor != null)
+                cursor.close();
         }
         return result;
     }
@@ -947,9 +960,10 @@ public class SQLiteStore implements Store, EncryptableStore {
             sql = "SELECT sequence, revid, deleted FROM revs " +
                     "WHERE doc_id=? ORDER BY sequence DESC";
         String[] args = {Long.toString(docNumericID)};
-        Cursor cursor = storageEngine.rawQuery(sql, args);
+        Cursor cursor = null;
         RevisionList result = null;
         try {
+            cursor = storageEngine.rawQuery(sql, args);
             cursor.moveToNext();
             result = new RevisionList();
             while (!cursor.isAfterLast()) {
@@ -972,7 +986,7 @@ public class SQLiteStore implements Store, EncryptableStore {
     @Override
     public List<String> getPossibleAncestorRevisionIDs(RevisionInternal rev,
                                                        int limit,
-                                                       AtomicBoolean onlyAttachments) {
+                                                       AtomicBoolean outHaveBodies) {
         int generation = rev.getGeneration();
         if (generation <= 1)
             return null;
@@ -983,31 +997,39 @@ public class SQLiteStore implements Store, EncryptableStore {
 
         List<String> revIDs = new ArrayList<String>();
 
-        int sqlLimit = limit > 0 ? (int) limit : -1;     // SQL uses -1, not 0, to denote 'no limit'
-        StringBuilder sql = new StringBuilder("SELECT revid, sequence FROM revs WHERE doc_id=? and revid < ?");
-        sql.append(" and deleted=0 and json not null");
-        sql.append(" and no_attachments=0");
-        sql.append(" ORDER BY sequence DESC LIMIT ?");
-        String[] args = {Long.toString(docNumericID), generation + "-", Integer.toString(sqlLimit)};
+        int sqlLimit = limit > 0 ? limit : -1;     // SQL uses -1, not 0, to denote 'no limit'
+        if (outHaveBodies != null) outHaveBodies.set(true);
 
-        Cursor cursor = null;
-        try {
-            cursor = storageEngine.rawQuery(sql.toString(), args);
-            cursor.moveToNext();
-            while (!cursor.isAfterLast()) {
-                if (onlyAttachments != null && revIDs.size() == 0)
-                    onlyAttachments.set(sequenceHasAttachments(cursor.getLong(1)));
-                    revIDs.add(cursor.getString(0));
+        // First look only for current revisions; if none match, go to non-current ones.
+        for (int current = 1; current >= 0; current--) {
+            StringBuilder sql = new StringBuilder("SELECT revid, json is not null FROM revs ");
+            sql.append("WHERE doc_id=? and current=? and revid < ? ");
+            sql.append("ORDER BY revid DESC LIMIT ?");
+            String[] args = {
+                    Long.toString(docNumericID),
+                    Integer.toString(current),
+                    String.format(Locale.ENGLISH, "%d-", generation),
+                    Integer.toString(sqlLimit)};
+            Cursor cursor = null;
+            try {
+                cursor = storageEngine.rawQuery(sql.toString(), args);
                 cursor.moveToNext();
+                while (!cursor.isAfterLast()) {
+                    revIDs.add(cursor.getString(0));
+                    if (outHaveBodies != null && cursor.getLong(1) == 0)
+                        outHaveBodies.set(false);
+                    cursor.moveToNext();
+                }
+            } catch (SQLException e) {
+                Log.e(TAG, "Error in a query: [%s]", e, sql);
+            } finally {
+                if (cursor != null)
+                    cursor.close();
             }
-        } catch (SQLException e) {
-            Log.e(TAG, "Error getting all revisions of document", e);
-        } finally {
-            if (cursor != null) {
-                cursor.close();
-            }
+            if (revIDs.size() > 0)
+                return revIDs;
         }
-        return revIDs;
+        return null;
     }
 
     /**
@@ -1274,7 +1296,7 @@ public class SQLiteStore implements Store, EncryptableStore {
             }
         } catch (SQLException e) {
             Log.e(TAG, "Error getting all docs", e);
-            throw new CouchbaseLiteException("Error getting all docs", e, new Status(Status.INTERNAL_SERVER_ERROR));
+            throw new CouchbaseLiteException("Error getting all docs", e, Status.INTERNAL_SERVER_ERROR);
         } finally {
             if (cursor != null) {
                 cursor.close();
@@ -1315,10 +1337,12 @@ public class SQLiteStore implements Store, EncryptableStore {
                 + "AND revs.doc_id = docs.doc_id "
                 + "ORDER BY revs.doc_id, revid DESC";
         String[] args = {Long.toString(lastSequence)};
-        Cursor cursor = storageEngine.rawQuery(sql, args);
-        cursor.moveToNext();
+        Cursor cursor = null;
         long lastDocId = 0;
         try {
+            cursor = storageEngine.rawQuery(sql, args);
+            cursor.moveToNext();
+
             while (!cursor.isAfterLast()) {
                 if (!options.isIncludeConflicts()) {
                     // Only count the first rev for a given doc (the rest will be losing conflicts):
@@ -1409,7 +1433,9 @@ public class SQLiteStore implements Store, EncryptableStore {
         String winningRevID = null;
         boolean inConflict = false;
 
-        beginTransaction();
+        if (!beginTransaction())
+            throw new CouchbaseLiteException("Error in beginTransaction()", Status.DB_ERROR);
+
         // try - finally for beginTransaction() and endTransaction()
         try {
             //// PART I: In which are performed lookups and validations prior to the insert...
@@ -1594,17 +1620,20 @@ public class SQLiteStore implements Store, EncryptableStore {
             }
 
             // Figure out what the new winning rev ID is:
-            winningRevID = winner(docNumericID, oldWinningRevID, oldWinnerWasDeletion.get(), newRev);
+            winningRevID = winner(docNumericID, oldWinningRevID, oldWinnerWasDeletion.get(), newRev, deleting ? wasConflicted : null);
+            // Note: In case of deleting and previously conflicting, there is possiblity
+            // no longer conflicted. Need to re-check if it is still conflicted.
+            if (deleting)
+                inConflict = inConflict && wasConflicted.get();
 
             // Success!
-            if (deleting) {
+            if (deleting)
                 outStatus.setCode(Status.OK);
-            } else {
+            else
                 outStatus.setCode(Status.CREATED);
-            }
-
         } finally {
-            endTransaction(outStatus.isSuccessful());
+            if (!endTransaction(outStatus.isSuccessful()))
+                throw new CouchbaseLiteException("Error in endTransaction()", Status.DB_ERROR);
         }
 
         //// EPILOGUE: A change notification is sent...
@@ -1642,7 +1671,9 @@ public class SQLiteStore implements Store, EncryptableStore {
         AtomicBoolean inConflict = new AtomicBoolean(false);
         boolean success = false;
 
-        beginTransaction();
+        if (!beginTransaction())
+            throw new CouchbaseLiteException("Error in beginTransaction()", Status.DB_ERROR);
+
         try {
             // First look up the document's row-id and all locally-known revisions of it:
             Map<String, RevisionInternal> localRevs = null;
@@ -1779,7 +1810,7 @@ public class SQLiteStore implements Store, EncryptableStore {
 
             if (!success) {
                 // Figure out what the new winning rev ID is:
-                winningRevID = winner(docNumericID, oldWinningRevID, oldWinnerWasDeletion.get(), rev);
+                winningRevID = winner(docNumericID, oldWinningRevID, oldWinnerWasDeletion.get(), rev, null);
                 success = true;
                 status.setCode(Status.CREATED);
             }
@@ -1787,7 +1818,8 @@ public class SQLiteStore implements Store, EncryptableStore {
             Log.e(TAG, "Error inserting revisions", e);
             throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
         } finally {
-            endTransaction(success);
+            if (!endTransaction(success))
+                throw new CouchbaseLiteException("Error in endTransaction()", Status.DB_ERROR);
         }
         // Notify and return:
         if (status.getCode() == Status.CREATED)
@@ -1970,15 +2002,17 @@ public class SQLiteStore implements Store, EncryptableStore {
                 // First capture the docIDs to be purged, so we can notify about them:
                 List<String> purgedIDs = new ArrayList<String>();
                 String queryString = "SELECT docid FROM docs WHERE expiry_timestamp <= ? and expiry_timestamp != 0";
-                Cursor cursor = storageEngine.rawQuery(queryString, args);
+                Cursor cursor = null;
                 try {
+                    cursor = storageEngine.rawQuery(queryString, args);
                     cursor.moveToNext();
                     while (!cursor.isAfterLast()) {
                         purgedIDs.add(cursor.getString(0));
                         cursor.moveToNext();
                     }
                 } finally {
-                    cursor.close();
+                    if (cursor != null)
+                        cursor.close();
                 }
 
                 // Now delete the docs:
@@ -2146,13 +2180,17 @@ public class SQLiteStore implements Store, EncryptableStore {
             throws CouchbaseLiteException {
         RevisionInternal result = null;
         boolean commit = false;
-        beginTransaction();
+
+        if (!beginTransaction())
+            throw new CouchbaseLiteException("Error in beginTransaction()", Status.DB_ERROR);
+
         try {
             RevisionInternal prevRev = getLocalDocument(revision.getDocID(), null);
             result = putLocalRevision(revision, prevRev == null ? null : prevRev.getRevID(), true);
             commit = true;
         } finally {
-            endTransaction(commit);
+            if (!endTransaction(commit))
+                throw new CouchbaseLiteException("Error in endTransaction()", Status.DB_ERROR);
         }
         return result;
     }
@@ -2227,7 +2265,7 @@ public class SQLiteStore implements Store, EncryptableStore {
                 " WHERE doc_id=? and current=1" +
                 " ORDER BY deleted asc, revid desc LIMIT ?";
 
-        long limit = (outIsConflict != null && outIsConflict.get()) ? 2 : 1;
+        long limit = outIsConflict != null ? 2 : 1;
         String[] args = {Long.toString(docNumericId), Long.toString(limit)};
         String revID = null;
         try {
@@ -2236,14 +2274,12 @@ public class SQLiteStore implements Store, EncryptableStore {
                 revID = cursor.getString(0);
                 outIsDeleted.set(cursor.getInt(1) > 0);
                 // The document is in conflict if there are two+ result rows that are not deletions.
-                if (outIsConflict != null) {
+                if (outIsConflict != null)
                     outIsConflict.set(!outIsDeleted.get() && cursor.moveToNext() && !(cursor.getInt(1) > 0));
-                }
             } else {
                 outIsDeleted.set(false);
-                if (outIsConflict != null) {
+                if (outIsConflict != null)
                     outIsConflict.set(false);
-                }
             }
         } catch (SQLException e) {
             Log.e(TAG, "Error", e);
@@ -2466,15 +2502,19 @@ public class SQLiteStore implements Store, EncryptableStore {
         // Now prune:
         int outPruned = 0;
         boolean shouldCommit = false;
+
+        if (!beginTransaction())
+            throw new CouchbaseLiteException("Error in beginTransaction()", Status.DB_ERROR);
+
         try {
-            beginTransaction();
             for (Long docNumericID : toPrune.keySet())
                 outPruned += pruneDocument("?", docNumericID, toPrune.get(docNumericID).intValue() + 1);
             shouldCommit = true;
         } catch (Throwable e) {
             throw new CouchbaseLiteException(e, Status.INTERNAL_SERVER_ERROR);
         } finally {
-            endTransaction(shouldCommit);
+            if (!endTransaction(shouldCommit))
+                throw new CouchbaseLiteException("Error in endTransaction()", Status.DB_ERROR);
         }
         return outPruned;
     }
@@ -2705,7 +2745,8 @@ public class SQLiteStore implements Store, EncryptableStore {
                 rev.setJSON(json);
             }
         } finally {
-            cursor.close();
+            if (cursor != null)
+                cursor.close();
         }
         return rev;
     }
@@ -2732,7 +2773,8 @@ public class SQLiteStore implements Store, EncryptableStore {
     private String winner(long docNumericID,
                           String oldWinningRevID,
                           boolean oldWinnerWasDeletion,
-                          RevisionInternal newRev)
+                          RevisionInternal newRev,
+                          AtomicBoolean outIsConflict) // optional
             throws CouchbaseLiteException {
 
         String newRevID = newRev.getRevID();
@@ -2748,7 +2790,7 @@ public class SQLiteStore implements Store, EncryptableStore {
         } else {
             // Doc was alive. How does this deletion affect the winning rev ID?
             AtomicBoolean outIsDeleted = new AtomicBoolean(false);
-            String winningRevID = winningRevIDOfDocNumericID(docNumericID, outIsDeleted, null);
+            String winningRevID = winningRevIDOfDocNumericID(docNumericID, outIsDeleted, outIsConflict);
             if (!winningRevID.equals(oldWinningRevID))
                 return winningRevID;
         }
